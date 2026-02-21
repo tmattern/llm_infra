@@ -1,0 +1,30 @@
+---
+# =============================================================================
+# k3s_cluster / tasks / agent.yml  –  join workers to the k3s cluster
+# =============================================================================
+
+- name: Check if k3s agent is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary_agent
+
+- name: Retrieve k3s token from master (if not already in facts)
+  ansible.builtin.set_fact:
+    k3s_token: "{{ hostvars[groups['master'][0]]['k3s_token'] }}"
+
+- name: Download and install k3s agent
+  ansible.builtin.shell: >
+    curl -sfL https://get.k3s.io |
+    INSTALL_K3S_VERSION="{{ k3s_version }}"
+    K3S_URL="https://{{ hostvars[groups['master'][0]]['ansible_host'] }}:6443"
+    K3S_TOKEN="{{ k3s_token }}"
+    sh -s - agent
+  args:
+    creates: /usr/local/bin/k3s
+  when: not k3s_binary_agent.stat.exists
+
+- name: Ensure k3s-agent service is started and enabled
+  ansible.builtin.systemd:
+    name: k3s-agent
+    state: started
+    enabled: true

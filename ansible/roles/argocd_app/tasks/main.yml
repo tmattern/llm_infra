@@ -1,0 +1,21 @@
+---
+# =============================================================================
+# argocd_app / tasks / main.yml  –  apply the root App-of-Apps Application
+# =============================================================================
+
+- name: Template root Application manifest
+  ansible.builtin.template:
+    src: root-application.yaml.j2
+    dest: /tmp/argocd-root-application.yaml
+    mode: '0644'
+
+- name: Apply root Application to Argo CD
+  ansible.builtin.command:
+    cmd: kubectl apply -f /tmp/argocd-root-application.yaml
+  register: root_app_apply
+  changed_when: "'configured' in root_app_apply.stdout or 'created' in root_app_apply.stdout"
+
+- name: Clean up temporary manifest
+  ansible.builtin.file:
+    path: /tmp/argocd-root-application.yaml
+    state: absent

@@ -1,0 +1,52 @@
+# =============================================================================
+# Helm values – kube-prometheus-stack (Prometheus + Grafana + Alertmanager)
+# Chart: prometheus-community/kube-prometheus-stack
+# =============================================================================
+
+# ── Prometheus ────────────────────────────────────────────────────────────────
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "2Gi"
+    # Scrape all namespaces
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+# ── Grafana ───────────────────────────────────────────────────────────────────
+grafana:
+  # ⚠️  IMPORTANT: Change this password before deploying to production.
+  # Better yet, remove this key and provide it via a Kubernetes Secret:
+  #   kubectl create secret generic grafana-admin-secret \
+  #     --from-literal=admin-password=<STRONG_PASSWORD> \
+  #     -n monitoring
+  # Then reference it with grafana.admin.existingSecret in values.
+  adminPassword: "changeme"  # CHANGE BEFORE PRODUCTION USE
+  service:
+    type: NodePort
+    nodePort: 30300
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClass: ""   # k3s local-path by default
+
+# ── Alertmanager ─────────────────────────────────────────────────────────────
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+
+# ── Node exporter ─────────────────────────────────────────────────────────────
+nodeExporter:
+  enabled: true
+
+# ── kube-state-metrics ────────────────────────────────────────────────────────
+kubeStateMetrics:
+  enabled: true

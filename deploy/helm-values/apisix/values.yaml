@@ -1,0 +1,37 @@
+# =============================================================================
+# Helm values – Apache APISIX
+# Chart: https://charts.apiseven.com  /  apisix
+# =============================================================================
+
+# Expose APISIX gateway via NodePort (no LoadBalancer in k3s bare-metal)
+gateway:
+  type: NodePort
+  http:
+    nodePort: 30090
+  tls:
+    nodePort: 30453
+
+# Disable Ingress controller side-car if not using Ingress
+ingress-controller:
+  enabled: false
+
+# APISIX Dashboard – exposed via NodePort
+dashboard:
+  enabled: true
+  service:
+    type: NodePort
+    nodePort: 30091
+
+# etcd – embedded (default)
+etcd:
+  replicaCount: 1
+
+# Resource limits (tune for your nodes)
+apisix:
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"

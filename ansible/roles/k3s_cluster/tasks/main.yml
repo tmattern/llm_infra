@@ -1,0 +1,12 @@
+---
+# =============================================================================
+# k3s_cluster / tasks / main.yml
+# =============================================================================
+
+- name: Install k3s server (master)
+  import_tasks: server.yml
+  when: inventory_hostname in groups['master']
+
+- name: Install k3s agent (workers)
+  import_tasks: agent.yml
+  when: inventory_hostname in groups['workers']
