@@ -4,7 +4,7 @@
 >
 > Ansible provisions a k3s cluster and bootstraps Argo CD.  
 > Argo CD then uses the **App of Apps** pattern to deploy and keep in sync:
-> Apache APISIX, vLLM, Prometheus/Grafana, and Headlamp.
+> Apache APISIX, vLLM, Prometheus/Grafana, **Loki/Promtail (log storage)**, and Headlamp.
 
 ---
 
@@ -20,6 +20,7 @@
 5. [Accessing services after deployment](#accessing-services-after-deployment)
    - [Argo CD](#argo-cd)
    - [Grafana](#grafana)
+   - [Logs – Loki + Promtail](#logs--loki--promtail)
    - [vLLM (OpenAI-compatible API)](#vllm-openai-compatible-api)
    - [Apache APISIX](#apache-apisix)
    - [Headlamp](#headlamp)
@@ -55,6 +56,7 @@ GitHub: tmattern/llm_infra
     ├── apisix.yaml       → Apache APISIX (API Gateway)
     ├── vllm.yaml         → vLLM (LLM inference)
     ├── monitoring.yaml   → Prometheus + Grafana
+    ├── logging.yaml      → Loki + Promtail (pod log storage)
     └── headlamp.yaml     → Headlamp (Kubernetes UI)
 ```
 
@@ -84,11 +86,13 @@ llm_infra/
 │   │       ├── apisix.yaml
 │   │       ├── vllm.yaml
 │   │       ├── monitoring.yaml
+│   │       ├── logging.yaml
 │   │       └── headlamp.yaml
 │   └── helm-values/
 │       ├── apisix/values.yaml
 │       ├── vllm/values.yaml
-│       ├── monitoring/values.yaml
+│       ├── monitoring/values.yaml  ← also wires Loki datasource into Grafana
+│       ├── logging/values.yaml     ← Loki + Promtail configuration
 │       └── headlamp/values.yaml
 └── README.md
 ```
@@ -218,6 +222,69 @@ http://<ANY_NODE_IP>:30300
 Default credentials: `admin` / `changeme`  
 (Change `grafana.adminPassword` in `deploy/helm-values/monitoring/values.yaml`)
 
+### Logs – Loki + Promtail
+
+Loki is the log aggregation backend; Promtail is a DaemonSet that automatically
+collects logs from every pod on every node and ships them to Loki.
+
+**Architecture:**
+
+```
+[Pod stdout/stderr]
+      │
+      ▼  (tail /var/log/pods/**/*.log)
+  Promtail (DaemonSet – one pod per node)
+      │
+      ▼  (HTTP push)
+  Loki (ClusterIP – internal only)
+      │
+      ▼  (Grafana datasource: http://loki-stack.logging.svc.cluster.local:3100)
+  Grafana → Explore → Loki
+```
+
+**No external port is required** – Loki is queried by Grafana via its internal
+ClusterIP.  If you need direct CLI access, use port-forward:
+
+```bash
+kubectl port-forward svc/loki-stack -n logging 3100:3100 \
+  --kubeconfig ~/.kube/k3s-prod.yaml
+# then query via LogCLI:
+logcli query '{namespace="vllm"}' --addr http://localhost:3100
+```
+
+**Query logs in Grafana:**
+
+1. Open Grafana → **Explore** → select the **Loki** datasource.
+2. Use the **Log browser** or type a [LogQL](https://grafana.com/docs/loki/latest/query/) query:
+
+```logql
+# All logs from the vllm namespace
+{namespace="vllm"}
+
+# Filter for errors in any pod
+{namespace="vllm"} |= "error"
+
+# APISIX access log lines containing a specific route
+{namespace="apisix"} |= "upstream_uri"
+
+# Count log lines per minute for a pod
+count_over_time({pod=~"vllm-.*"}[1m])
+```
+
+**Key labels automatically added by Promtail:**
+
+| Label | Example |
+|-------|---------|
+| `namespace` | `vllm` |
+| `pod` | `vllm-abc12` |
+| `container` | `vllm` |
+| `node_name` | `k3s-worker1` |
+| `app` | `vllm` |
+
+**Retention:** logs are kept for 30 days by default.  
+Change `loki.config.limits_config.retention_period` in
+`deploy/helm-values/logging/values.yaml`.
+
 ### vLLM (OpenAI-compatible API)
 
 ```bash
@@ -265,6 +332,7 @@ Argo CD
         ├── apisix      (Helm chart + values from this repo)
         ├── vllm        (Helm chart + values from this repo)
         ├── monitoring  (kube-prometheus-stack + values)
+        ├── logging     (loki-stack: Loki + Promtail)
         └── headlamp    (Helm chart + values)
 ```
 
@@ -288,7 +356,8 @@ Edit the relevant `values.yaml`, commit, and push – Argo CD will reconcile.
 deploy/helm-values/
 ├── apisix/values.yaml
 ├── vllm/values.yaml       ← model name, GPU limits, …
-├── monitoring/values.yaml ← Grafana password, retention, …
+├── monitoring/values.yaml ← Grafana password, retention, Loki datasource wiring
+├── logging/values.yaml    ← Loki retention, storage size, Promtail scrape config
 └── headlamp/values.yaml
 ```
 
@@ -352,3 +421,27 @@ Run `argocd app sync root-app` or wait for the next auto-sync.
 
 Increase `resources.limits.memory` in `deploy/helm-values/vllm/values.yaml`  
 or assign GPU resources and enable GPU scheduling (`nvidia.com/gpu`).
+
+**Loki pods not starting / PVC Pending**
+
+k3s ships with the `local-path` provisioner which creates PVCs automatically.
+If the PVC stays `Pending`, check:
+
+```bash
+kubectl get pvc -n logging --kubeconfig ~/.kube/k3s-prod.yaml
+kubectl describe pvc loki-stack -n logging --kubeconfig ~/.kube/k3s-prod.yaml
+```
+
+**No logs visible in Grafana Explore**
+
+1. Confirm Promtail is running on every node:
+   ```bash
+   kubectl get pods -n logging -o wide --kubeconfig ~/.kube/k3s-prod.yaml
+   ```
+2. Check Promtail logs for connection errors:
+   ```bash
+   kubectl logs -n logging -l app=promtail --tail=50 \
+     --kubeconfig ~/.kube/k3s-prod.yaml
+   ```
+3. Verify the Loki datasource URL in Grafana → **Configuration** → **Data Sources**.  
+   It should be `http://loki-stack.logging.svc.cluster.local:3100`.

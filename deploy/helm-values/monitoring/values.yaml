@@ -35,6 +35,25 @@ grafana:
     size: 5Gi
     storageClass: ""   # k3s local-path by default
 
+  # ── Additional datasources ─────────────────────────────────────────────────
+  # Loki is deployed by the 'logging' Argo CD app (deploy/argocd/apps/logging.yaml).
+  # This block automatically provisions it as a datasource in Grafana so that
+  # you can explore pod logs straight from the Explore tab or build dashboards.
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      url: http://loki-stack.logging.svc.cluster.local:3100
+      access: proxy
+      isDefault: false
+      jsonData:
+        # Correlate Loki logs with Prometheus metrics via derived fields.
+        # Uncomment and adapt once traces are set up (e.g. Tempo).
+        # derivedFields:
+        #   - name: TraceID
+        #     matcherRegex: "trace_id=(\\w+)"
+        #     url: http://tempo.monitoring.svc.cluster.local:3200/api/traces/$${__value.raw}
+        maxLines: 1000
+
 # ── Alertmanager ─────────────────────────────────────────────────────────────
 alertmanager:
   alertmanagerSpec:
