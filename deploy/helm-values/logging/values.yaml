@@ -1,0 +1,93 @@
+# =============================================================================
+# Helm values – loki-stack (Loki + Promtail)
+# Chart: grafana/loki-stack  version 2.10.2
+# https://github.com/grafana/helm-charts/tree/main/charts/loki-stack
+# =============================================================================
+
+# ── Loki ─────────────────────────────────────────────────────────────────────
+loki:
+  enabled: true
+
+  # Monolithic (single-binary) mode – suitable for a small k3s cluster.
+  # For higher throughput, switch to simple-scalable or microservices mode.
+
+  # Persist logs to a PVC (uses k3s default local-path StorageClass).
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""   # leave empty → uses the cluster default (local-path)
+
+  # Retention period – logs older than this will be compacted/deleted.
+  config:
+    limits_config:
+      retention_period: 30d
+      # Max ingestion rate per stream (tune upward for high-volume LLM logs)
+      ingestion_rate_mb: 16
+      ingestion_burst_size_mb: 32
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+
+  # Loki HTTP API – internal ClusterIP only (accessed by Grafana / LogCLI).
+  # To query logs from outside the cluster, use kubectl port-forward or
+  # expose via NodePort by uncommenting the block below:
+  #
+  # service:
+  #   type: NodePort
+  #   nodePort: 30310
+
+# ── Promtail ──────────────────────────────────────────────────────────────────
+# Promtail runs as a DaemonSet on every node; it tails all container logs
+# under /var/log/pods/**/*.log and forwards them to Loki, enriching each
+# log line with Kubernetes metadata labels (namespace, pod, container, node).
+promtail:
+  enabled: true
+
+  config:
+    # Send logs to the Loki service in the same namespace.
+    # The release name is pinned to 'loki-stack' (see logging.yaml), so the
+    # Kubernetes Service will always be named 'loki-stack'.
+    clients:
+      - url: http://loki-stack.logging.svc.cluster.local:3100/loki/api/v1/push
+
+    # Promtail's default Kubernetes service discovery automatically collects
+    # all pod logs and enriches them with namespace/pod/container/node labels.
+    #
+    # Add extraScrapeConfigs below only if you need custom pipeline stages,
+    # e.g. parsing structured JSON emitted by vLLM or APISIX:
+    #
+    # snippets:
+    #   extraScrapeConfigs: |
+    #     - job_name: vllm-json
+    #       pipeline_stages:
+    #         - json:
+    #             expressions:
+    #               level: level
+    #               message: message
+    #         - labels:
+    #             level:
+    #       kubernetes_sd_configs:
+    #         - role: pod
+    #           namespaces:
+    #             names: [vllm]
+
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+  # Tolerate all taints so Promtail can run on every node (including master).
+  tolerations:
+    - operator: Exists
+
+# ── Grafana sidecar (disabled – we use the monitoring stack's Grafana) ────────
+grafana:
+  enabled: false

@@ -1,0 +1,33 @@
+---
+# =============================================================================
+# Argo CD Application – Apache APISIX (API Gateway)
+# Helm chart: https://charts.apiseven.com
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: apisix
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://charts.apiseven.com
+      chart: apisix
+      targetRevision: "2.9.0"
+      helm:
+        valueFiles:
+          - $values/deploy/helm-values/apisix/values.yaml
+    - repoURL: https://github.com/tmattern/llm_infra.git
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: apisix
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

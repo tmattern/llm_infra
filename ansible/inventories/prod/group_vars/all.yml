@@ -1,0 +1,38 @@
+---
+# =============================================================================
+# Group variables – all hosts
+# =============================================================================
+
+# ── k3s ──────────────────────────────────────────────────────────────────────
+# Pin a specific k3s release; see https://github.com/k3s-io/k3s/releases
+k3s_version: "v1.29.3+k3s1"
+
+# Extra arguments passed to the k3s server installer.
+# Disable Traefik (we expose services via NodePort or will add our own ingress).
+k3s_server_extra_args: "--disable traefik --disable servicelb"
+
+# kubeconfig is fetched from the master and stored locally.
+kubeconfig_local_path: "~/.kube/k3s-prod.yaml"
+
+# ── Argo CD ───────────────────────────────────────────────────────────────────
+argocd_namespace: argocd
+
+# Upstream install manifest (pin a specific release).
+# See https://github.com/argoproj/argo-cd/releases
+argocd_version: "v2.10.3"
+argocd_install_manifest: "https://raw.githubusercontent.com/argoproj/argo-cd/{{ argocd_version }}/manifests/install.yaml"
+
+# Argo CD server NodePort (set to "" to leave as ClusterIP and use port-forward)
+argocd_server_nodeport: "30080"
+argocd_server_nodeport_https: "30443"
+
+# ── App of Apps root application ─────────────────────────────────────────────
+# The Git repository that Argo CD should watch (this very repo).
+argocd_repo_url: "https://github.com/tmattern/llm_infra.git"
+argocd_repo_revision: "HEAD"
+
+# Path inside the repo where the child Application manifests live.
+argocd_apps_path: "deploy/argocd/apps"
+
+# ── SSH / connectivity (placeholders – fill in or pass via --extra-vars) ──────
+# ansible_ssh_private_key_file: ""   # already set per-host in hosts.ini

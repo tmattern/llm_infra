@@ -1,0 +1,43 @@
+---
+# =============================================================================
+# Argo CD Application – Logging (Loki + Promtail)
+# Helm chart: grafana/loki-stack
+# https://github.com/grafana/helm-charts/tree/main/charts/loki-stack
+#
+# loki-stack bundles:
+#   - Loki  : log aggregation and storage backend
+#   - Promtail : DaemonSet that tails container logs from every node and
+#               ships them to Loki using the same label model as Prometheus
+#
+# Grafana (deployed by the monitoring app) is pre-configured to use Loki as
+# an additional datasource – see deploy/helm-values/monitoring/values.yaml.
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: logging
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: loki-stack
+      targetRevision: "2.10.2"
+      helm:
+        releaseName: loki-stack
+        valueFiles:
+          - $values/deploy/helm-values/logging/values.yaml
+    - repoURL: https://github.com/tmattern/llm_infra.git
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: logging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

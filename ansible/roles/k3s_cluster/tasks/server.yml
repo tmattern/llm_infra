@@ -1,0 +1,57 @@
+---
+# =============================================================================
+# k3s_cluster / tasks / server.yml  –  install k3s server on master node
+# =============================================================================
+
+- name: Check if k3s is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary
+
+- name: Download and install k3s server
+  ansible.builtin.shell: >
+    curl -sfL https://get.k3s.io |
+    INSTALL_K3S_VERSION="{{ k3s_version }}"
+    sh -s - server {{ k3s_server_extra_args }}
+  args:
+    creates: /usr/local/bin/k3s
+  when: not k3s_binary.stat.exists
+
+- name: Ensure k3s service is started and enabled
+  ansible.builtin.systemd:
+    name: k3s
+    state: started
+    enabled: true
+
+- name: Wait for k3s to be ready (node becomes Ready)
+  ansible.builtin.command:
+    cmd: kubectl get nodes --no-headers
+  register: nodes_status
+  until: "'Ready' in nodes_status.stdout"
+  retries: 20
+  delay: 15
+  changed_when: false
+
+- name: Read k3s node token
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: k3s_node_token_raw
+
+- name: Set k3s_token fact (shared with workers)
+  ansible.builtin.set_fact:
+    k3s_token: "{{ k3s_node_token_raw.content | b64decode | trim }}"
+
+- name: Fetch kubeconfig from master
+  ansible.builtin.fetch:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "{{ kubeconfig_local_path }}"
+    flat: true
+  become: true
+
+- name: Replace 127.0.0.1 with master IP in local kubeconfig
+  ansible.builtin.replace:
+    path: "{{ kubeconfig_local_path }}"
+    regexp: '127\.0\.0\.1'
+    replace: "{{ ansible_host }}"
+  delegate_to: localhost
+  become: false

@@ -1,0 +1,41 @@
+# =============================================================================
+# Helm values – vLLM
+# Chart: https://vllm-project.github.io/vllm
+# =============================================================================
+
+# ── Model configuration ───────────────────────────────────────────────────────
+# Set the Hugging Face model ID to serve.
+# Example: "mistralai/Mistral-7B-Instruct-v0.2"
+# A Hugging Face token is required for gated models; provide it as a secret.
+model: "mistralai/Mistral-7B-Instruct-v0.2"
+# huggingFaceToken: ""   # use a Kubernetes Secret instead – see README
+
+# ── Service ───────────────────────────────────────────────────────────────────
+service:
+  type: NodePort
+  nodePort: 30800
+  port: 8000
+
+# ── GPU / resources ───────────────────────────────────────────────────────────
+# Uncomment and adjust if your nodes have NVIDIA GPUs.
+# resources:
+#   limits:
+#     nvidia.com/gpu: "1"
+
+# CPU-only fallback (remove when GPU is available)
+resources:
+  requests:
+    cpu: "2"
+    memory: "8Gi"
+  limits:
+    cpu: "4"
+    memory: "16Gi"
+
+# ── Replicas ──────────────────────────────────────────────────────────────────
+replicaCount: 1
+
+# ── Persistence (model weights cache) ─────────────────────────────────────────
+persistence:
+  enabled: true
+  size: 50Gi
+  storageClass: ""   # use default StorageClass (k3s provides local-path)

@@ -1,0 +1,30 @@
+---
+# =============================================================================
+# Root Application (App of Apps)
+# =============================================================================
+# This manifest is applied by Ansible (roles/argocd_app) during bootstrapping.
+# It tells Argo CD to watch deploy/argocd/apps/ and reconcile every
+# Application manifest found there.
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-app
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/tmattern/llm_infra.git
+    targetRevision: HEAD
+    path: deploy/argocd/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

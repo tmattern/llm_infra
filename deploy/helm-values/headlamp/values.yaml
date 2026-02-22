@@ -1,0 +1,25 @@
+# =============================================================================
+# Helm values – Headlamp (Kubernetes Web UI)
+# Chart: headlamp-k8s/headlamp
+# =============================================================================
+
+# ── Service ───────────────────────────────────────────────────────────────────
+service:
+  type: NodePort
+  nodePort: 30190
+
+# ── In-cluster mode (reads kubeconfig from ServiceAccount) ────────────────────
+config:
+  inCluster: true
+
+# ── Resources ─────────────────────────────────────────────────────────────────
+resources:
+  requests:
+    cpu: "50m"
+    memory: "64Mi"
+  limits:
+    cpu: "200m"
+    memory: "256Mi"
+
+# ── Replicas ──────────────────────────────────────────────────────────────────
+replicaCount: 1
